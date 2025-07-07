@@ -25,59 +25,54 @@
               type="file" 
               accept="image/*" 
               @change="handleImageUpload"
-              style="display: none"
+              class="file-input"
             />
-            <div v-if="!uploadedImage" class="upload-placeholder">
+            <div v-if="!uploadedImage" class="upload-hint">
               <div class="upload-icon">📷</div>
               <p>{{ $t('uploadHint') }}</p>
             </div>
-            <img v-else :src="uploadedImage" alt="Uploaded" class="uploaded-image" />
+            <img v-if="uploadedImage" :src="uploadedImage" alt="uploaded" class="uploaded-image" />
           </div>
         </div>
 
-        <div class="controls-section">
+        <div class="controls">
           <div class="control-group">
-            <label class="control-label">{{ $t('style') }}</label>
-            <select v-model="selectedStyle" class="style-select">
-              <option value="original">{{ $t('styles.original') }}</option>
-              <option value="grayscale">{{ $t('styles.grayscale') }}</option>
-              <option value="sepia">{{ $t('styles.sepia') }}</option>
-              <option value="blur">{{ $t('styles.blur') }}</option>
-              <option value="brightness">{{ $t('styles.brightness') }}</option>
-              <option value="contrast">{{ $t('styles.contrast') }}</option>
-              <option value="saturate">{{ $t('styles.saturate') }}</option>
-              <option value="invert">{{ $t('styles.invert') }}</option>
+            <label>{{ $t('style') }}</label>
+            <select v-model="selectedStyle" @change="applyEffect" class="style-select">
+              <option v-for="(label, key) in $t('styles')" :key="key" :value="key">
+                {{ label }}
+              </option>
             </select>
           </div>
 
           <div class="control-group">
-            <label class="control-label">{{ $t('text') }}</label>
+            <label>{{ $t('text') }}</label>
             <input
               v-model="userText"
               :placeholder="$t('textPlaceholder')"
               maxlength="10"
+              @input="drawText"
               class="text-input"
             />
           </div>
         </div>
 
-        <div class="preview-section">
-          <h3>{{ $t('preview') }}</h3>
+        <div class="canvas-section">
           <canvas 
             ref="canvas" 
-            width="500" 
-            height="500"
+            width="400" 
+            height="400"
             class="preview-canvas"
           ></canvas>
         </div>
 
-        <div class="action-section">
+        <div class="actions">
           <button 
             @click="downloadImage" 
             :disabled="!uploadedImage"
             class="download-btn"
           >
-            {{ $t('download') }} 📥
+            {{ $t('download') }}
           </button>
         </div>
       </main>
@@ -86,24 +81,25 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
-import { useCanvasUtils } from '@/composables/useCanvasUtils'
+import { ref, onMounted, nextTick } from 'vue'
+import { useCanvasUtils } from '@/composables/useCanvasUtils.js'
 
-const fileInput = ref(null)
 const canvas = ref(null)
+const fileInput = ref(null)
 const uploadedImage = ref(null)
 const selectedStyle = ref('original')
 const userText = ref('')
-const imageElement = ref(null)
 
-const { loadImageToCanvas, applyStyle, drawText } = useCanvasUtils()
+const { loadImageToCanvas, applyStyleFilter, drawTextOnCanvas, downloadCanvas } = useCanvasUtils()
 
 function triggerFileInput() {
-  fileInput.value.click()
+  if (fileInput.value) {
+    fileInput.value.click()
+  }
 }
 
 function handleImageUpload(event) {
-  const file = event.target.files[0]
+  const file = event.target.files?.[0]
   if (!file) return
   
   const reader = new FileReader()
@@ -115,51 +111,57 @@ function handleImageUpload(event) {
 }
 
 function handleDrop(event) {
-  const files = event.dataTransfer.files
-  if (files.length > 0) {
-    const file = files[0]
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        uploadedImage.value = e.target.result
-        loadImage(e.target.result)
-      }
-      reader.readAsDataURL(file)
+  const file = event.dataTransfer.files?.[0]
+  if (file && file.type.startsWith('image/')) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      uploadedImage.value = e.target.result
+      loadImage(e.target.result)
     }
+    reader.readAsDataURL(file)
   }
 }
 
 function loadImage(src) {
   const img = new Image()
   img.onload = () => {
-    imageElement.value = img
-    redraw()
+    if (canvas.value) {
+      loadImageToCanvas(canvas.value, img)
+      applyEffect()
+      drawText()
+    }
   }
   img.src = src
 }
 
-function redraw() {
-  if (!imageElement.value || !canvas.value) return
-  
-  nextTick(() => {
-    const ctx = canvas.value.getContext('2d')
-    loadImageToCanvas(ctx, imageElement.value)
-    applyStyle(ctx, selectedStyle.value)
-    drawText(ctx, userText.value)
-  })
+function applyEffect() {
+  if (!uploadedImage.value || !canvas.value) return
+  applyStyleFilter(canvas.value, selectedStyle.value)
+  drawText()
+}
+
+function drawText() {
+  if (!uploadedImage.value || !canvas.value) return
+  drawTextOnCanvas(canvas.value, userText.value)
 }
 
 function downloadImage() {
-  if (!canvas.value) return
-  
-  const link = document.createElement('a')
-  link.download = 'meme.png'
-  link.href = canvas.value.toDataURL()
-  link.click()
+  if (!uploadedImage.value || !canvas.value) return
+  downloadCanvas(canvas.value, 'meme.png')
 }
 
-watch(selectedStyle, redraw)
-watch(userText, redraw)
+onMounted(async () => {
+  await nextTick()
+  if (canvas.value) {
+    const ctx = canvas.value.getContext('2d')
+    ctx.fillStyle = '#f0f0f0'
+    ctx.fillRect(0, 0, 400, 400)
+    ctx.fillStyle = '#666'
+    ctx.font = '16px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('请上传图片', 200, 200)
+  }
+})
 </script>
 
 <style scoped>
@@ -170,10 +172,13 @@ watch(userText, redraw)
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
-  min-height: 100vh;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
 }
 
 .header {
@@ -181,31 +186,22 @@ watch(userText, redraw)
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 20px 30px;
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
 }
 
 .title {
-  color: white;
-  font-size: 2.5rem;
-  font-weight: bold;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.language-selector {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-size: 2rem;
+  color: #333;
+  margin: 0;
 }
 
 .language-select {
   padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid #ddd;
+  border-radius: 6px;
   font-size: 14px;
+  background: white;
   cursor: pointer;
 }
 
@@ -221,119 +217,109 @@ watch(userText, redraw)
 }
 
 .upload-area {
-  border: 3px dashed rgba(255, 255, 255, 0.5);
-  border-radius: 15px;
+  border: 3px dashed #ddd;
+  border-radius: 12px;
   padding: 40px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: #fafafa;
 }
 
 .upload-area:hover {
-  border-color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.2);
+  border-color: #667eea;
+  background: #f8f9ff;
 }
 
 .upload-area.has-image {
   border-style: solid;
-  border-color: #4CAF50;
+  border-color: #667eea;
 }
 
-.upload-placeholder {
-  color: white;
+.file-input {
+  display: none;
+}
+
+.upload-hint {
+  color: #666;
 }
 
 .upload-icon {
-  font-size: 4rem;
-  margin-bottom: 15px;
+  font-size: 48px;
+  margin-bottom: 16px;
 }
 
 .uploaded-image {
   max-width: 100%;
-  max-height: 300px;
-  border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  max-height: 200px;
+  border-radius: 8px;
 }
 
-.controls-section {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 25px;
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .control-group {
-  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.control-label {
-  display: block;
-  color: white;
-  font-weight: bold;
-  margin-bottom: 8px;
-  font-size: 1.1rem;
+.control-group label {
+  font-weight: 600;
+  color: #333;
 }
 
-.style-select, .text-input {
-  width: 100%;
+.style-select,
+.text-input {
   padding: 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  background: rgba(255, 255, 255, 0.9);
-  transition: all 0.3s ease;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
 }
 
-.style-select:focus, .text-input:focus {
+.style-select:focus,
+.text-input:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+  border-color: #667eea;
 }
 
-.preview-section {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 25px;
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
-  text-align: center;
-}
-
-.preview-section h3 {
-  color: white;
-  margin-bottom: 15px;
-  font-size: 1.3rem;
+.canvas-section {
+  display: flex;
+  justify-content: center;
 }
 
 .preview-canvas {
+  border: 2px solid #ddd;
+  border-radius: 8px;
   max-width: 100%;
-  border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  background: white;
+  height: auto;
 }
 
-.action-section {
+.actions {
   grid-column: 1 / -1;
-  text-align: center;
+  display: flex;
+  justify-content: center;
   margin-top: 20px;
 }
 
 .download-btn {
-  background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 15px 30px;
-  font-size: 1.2rem;
-  font-weight: bold;
-  border-radius: 50px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .download-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .download-btn:disabled {
@@ -346,13 +332,9 @@ watch(userText, redraw)
     grid-template-columns: 1fr;
   }
   
-  .title {
-    font-size: 2rem;
-  }
-  
-  .header {
-    flex-direction: column;
-    gap: 15px;
+  .container {
+    margin: 10px;
+    padding: 15px;
   }
 }
 </style>
@@ -361,9 +343,21 @@ watch(userText, redraw)
 ```js:src/main.js
 import { createApp } from 'vue'
 import App from './App.vue'
-import i18n from './i18n'
+import i18n from './i18n.js'
 
-createApp(App).use(i18n).mount('#app')
+// 确保DOM已加载
+document.addEventListener('DOMContentLoaded', () => {
+  const app = createApp(App)
+  app.use(i18n)
+  
+  // 确保挂载点存在
+  const mountPoint = document.getElementById('app')
+  if (mountPoint) {
+    app.mount('#app')
+  } else {
+    console.error('Mount point #app not found')
+  }
+})
 ```
 
 ```js:src/i18n.js

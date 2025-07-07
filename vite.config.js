@@ -9,5 +9,20 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
-  base: './'
+  base: './',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['vue', 'vue-i18n']
+        }
+      }
+    }
+  },
+  server: {
+    host: true,
+    port: 3000
+  }
 }) 
