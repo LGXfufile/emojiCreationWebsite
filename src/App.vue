@@ -1,0 +1,683 @@
+<template>
+  <div id="app">
+    <div class="container">
+      <header class="header">
+        <h1 class="title">{{ $t('title') }}</h1>
+        <div class="language-selector">
+          <select v-model="$i18n.locale" class="language-select">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+          </select>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="upload-section">
+          <div 
+            class="upload-area"
+            :class="{ 'has-image': uploadedImage }"
+            @click="triggerFileInput"
+            @dragover.prevent
+            @drop.prevent="handleDrop"
+          >
+            <input 
+              ref="fileInput"
+              type="file" 
+              accept="image/*" 
+              @change="handleImageUpload"
+              style="display: none"
+            />
+            <div v-if="!uploadedImage" class="upload-placeholder">
+              <div class="upload-icon">📷</div>
+              <p>{{ $t('uploadHint') }}</p>
+            </div>
+            <img v-else :src="uploadedImage" alt="Uploaded" class="uploaded-image" />
+          </div>
+        </div>
+
+        <div class="controls-section">
+          <div class="control-group">
+            <label class="control-label">{{ $t('style') }}</label>
+            <select v-model="selectedStyle" class="style-select">
+              <option value="original">{{ $t('styles.original') }}</option>
+              <option value="grayscale">{{ $t('styles.grayscale') }}</option>
+              <option value="sepia">{{ $t('styles.sepia') }}</option>
+              <option value="blur">{{ $t('styles.blur') }}</option>
+              <option value="brightness">{{ $t('styles.brightness') }}</option>
+              <option value="contrast">{{ $t('styles.contrast') }}</option>
+              <option value="saturate">{{ $t('styles.saturate') }}</option>
+              <option value="invert">{{ $t('styles.invert') }}</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">{{ $t('text') }}</label>
+            <input
+              v-model="userText"
+              :placeholder="$t('textPlaceholder')"
+              maxlength="10"
+              class="text-input"
+            />
+          </div>
+        </div>
+
+        <div class="preview-section">
+          <h3>{{ $t('preview') }}</h3>
+          <canvas 
+            ref="canvas" 
+            width="500" 
+            height="500"
+            class="preview-canvas"
+          ></canvas>
+        </div>
+
+        <div class="action-section">
+          <button 
+            @click="downloadImage" 
+            :disabled="!uploadedImage"
+            class="download-btn"
+          >
+            {{ $t('download') }} 📥
+          </button>
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch, nextTick } from 'vue'
+import { useCanvasUtils } from '@/composables/useCanvasUtils'
+
+const fileInput = ref(null)
+const canvas = ref(null)
+const uploadedImage = ref(null)
+const selectedStyle = ref('original')
+const userText = ref('')
+const imageElement = ref(null)
+
+const { loadImageToCanvas, applyStyle, drawText } = useCanvasUtils()
+
+function triggerFileInput() {
+  fileInput.value.click()
+}
+
+function handleImageUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    uploadedImage.value = e.target.result
+    loadImage(e.target.result)
+  }
+  reader.readAsDataURL(file)
+}
+
+function handleDrop(event) {
+  const files = event.dataTransfer.files
+  if (files.length > 0) {
+    const file = files[0]
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        uploadedImage.value = e.target.result
+        loadImage(e.target.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+}
+
+function loadImage(src) {
+  const img = new Image()
+  img.onload = () => {
+    imageElement.value = img
+    redraw()
+  }
+  img.src = src
+}
+
+function redraw() {
+  if (!imageElement.value || !canvas.value) return
+  
+  nextTick(() => {
+    const ctx = canvas.value.getContext('2d')
+    loadImageToCanvas(ctx, imageElement.value)
+    applyStyle(ctx, selectedStyle.value)
+    drawText(ctx, userText.value)
+  })
+}
+
+function downloadImage() {
+  if (!canvas.value) return
+  
+  const link = document.createElement('a')
+  link.download = 'meme.png'
+  link.href = canvas.value.toDataURL()
+  link.click()
+}
+
+watch(selectedStyle, redraw)
+watch(userText, redraw)
+</script>
+
+<style scoped>
+#app {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px 30px;
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+}
+
+.title {
+  color: white;
+  font-size: 2.5rem;
+  font-weight: bold;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.language-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-select {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  align-items: start;
+}
+
+.upload-section {
+  grid-column: 1 / -1;
+}
+
+.upload-area {
+  border: 3px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 15px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.upload-area:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.upload-area.has-image {
+  border-style: solid;
+  border-color: #4CAF50;
+}
+
+.upload-placeholder {
+  color: white;
+}
+
+.upload-icon {
+  font-size: 4rem;
+  margin-bottom: 15px;
+}
+
+.uploaded-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.controls-section {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 25px;
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+}
+
+.control-group {
+  margin-bottom: 20px;
+}
+
+.control-label {
+  display: block;
+  color: white;
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+.style-select, .text-input {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
+}
+
+.style-select:focus, .text-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.preview-section {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 25px;
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.preview-section h3 {
+  color: white;
+  margin-bottom: 15px;
+  font-size: 1.3rem;
+}
+
+.preview-canvas {
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  background: white;
+}
+
+.action-section {
+  grid-column: 1 / -1;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.download-btn {
+  background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.download-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.download-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+  
+  .title {
+    font-size: 2rem;
+  }
+  
+  .header {
+    flex-direction: column;
+    gap: 15px;
+  }
+}
+</style>
+```
+
+```js:src/main.js
+import { createApp } from 'vue'
+import App from './App.vue'
+import i18n from './i18n'
+
+createApp(App).use(i18n).mount('#app')
+```
+
+```js:src/i18n.js
+import { createI18n } from 'vue-i18n'
+
+const messages = {
+  'zh-CN': {
+    title: '制作你的专属表情包',
+    upload: '上传图片',
+    uploadHint: '点击或拖拽图片到此区域',
+    style: '选择风格',
+    text: '输入文字（最多10字）',
+    textPlaceholder: '输入表情包文字...',
+    download: '下载表情包',
+    preview: '预览',
+    language: '语言',
+    styles: {
+      original: '原图',
+      grayscale: '黑白',
+      sepia: '怀旧',
+      blur: '模糊',
+      brightness: '高亮',
+      contrast: '对比',
+      saturate: '饱和',
+      invert: '反色'
+    }
+  },
+  'en-US': {
+    title: 'Create Your Own Meme',
+    upload: 'Upload Image',
+    uploadHint: 'Click or drag image to this area',
+    style: 'Choose Style',
+    text: 'Enter Text (max 10 chars)',
+    textPlaceholder: 'Enter meme text...',
+    download: 'Download Meme',
+    preview: 'Preview',
+    language: 'Language',
+    styles: {
+      original: 'Original',
+      grayscale: 'Grayscale',
+      sepia: 'Sepia',
+      blur: 'Blur',
+      brightness: 'Brightness',
+      contrast: 'Contrast',
+      saturate: 'Saturate',
+      invert: 'Invert'
+    }
+  }
+}
+
+export default createI18n({
+  legacy: false,
+  locale: 'zh-CN',
+  fallbackLocale: 'en-US',
+  messages
+})
+```
+
+```vue:src/composables/useCanvasUtils.js
+export function useCanvasUtils() {
+  function loadImageToCanvas(ctx, image) {
+    const canvas = ctx.canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // 计算缩放比例以适应canvas
+    const scale = Math.min(canvas.width / image.width, canvas.height / image.height)
+    const x = (canvas.width - image.width * scale) / 2
+    const y = (canvas.height - image.height * scale) / 2
+    
+    ctx.drawImage(image, x, y, image.width * scale, image.height * scale)
+  }
+
+  function applyStyle(ctx, style) {
+    const canvas = ctx.canvas
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const data = imageData.data
+
+    switch (style) {
+      case 'grayscale':
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+          data[i] = gray
+          data[i + 1] = gray
+          data[i + 2] = gray
+        }
+        break
+      
+      case 'sepia':
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i]
+          const g = data[i + 1]
+          const b = data[i + 2]
+          
+          data[i] = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189))
+          data[i + 1] = Math.min(255, (r * 0.349) + (g * 0.686) + (b * 0.168))
+          data[i + 2] = Math.min(255, (r * 0.272) + (g * 0.534) + (b * 0.131))
+        }
+        break
+      
+      case 'invert':
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = 255 - data[i]
+          data[i + 1] = 255 - data[i + 1]
+          data[i + 2] = 255 - data[i + 2]
+        }
+        break
+      
+      case 'brightness':
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = Math.min(255, data[i] + 50)
+          data[i + 1] = Math.min(255, data[i + 1] + 50)
+          data[i + 2] = Math.min(255, data[i + 2] + 50)
+        }
+        break
+      
+      case 'contrast':
+        const factor = 1.5
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128))
+          data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128))
+          data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128))
+        }
+        break
+      
+      case 'saturate':
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
+          data[i] = Math.min(255, gray + 1.5 * (data[i] - gray))
+          data[i + 1] = Math.min(255, gray + 1.5 * (data[i + 1] - gray))
+          data[i + 2] = Math.min(255, gray + 1.5 * (data[i + 2] - gray))
+        }
+        break
+      
+      case 'blur':
+        // 简单的模糊效果
+        applyBoxBlur(data, canvas.width, canvas.height)
+        break
+    }
+
+    if (style !== 'original') {
+      ctx.putImageData(imageData, 0, 0)
+    }
+  }
+
+  function applyBoxBlur(data, width, height) {
+    const radius = 2
+    const kernel = []
+    const kernelSize = 2 * radius + 1
+    
+    for (let i = 0; i < kernelSize; i++) {
+      kernel[i] = []
+      for (let j = 0; j < kernelSize; j++) {
+        kernel[i][j] = 1 / (kernelSize * kernelSize)
+      }
+    }
+    
+    const output = new Uint8ClampedArray(data.length)
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let r = 0, g = 0, b = 0, a = 0
+        
+        for (let ky = -radius; ky <= radius; ky++) {
+          for (let kx = -radius; kx <= radius; kx++) {
+            const px = Math.min(width - 1, Math.max(0, x + kx))
+            const py = Math.min(height - 1, Math.max(0, y + ky))
+            const idx = (py * width + px) * 4
+            
+            const weight = kernel[ky + radius][kx + radius]
+            r += data[idx] * weight
+            g += data[idx + 1] * weight
+            b += data[idx + 2] * weight
+            a += data[idx + 3] * weight
+          }
+        }
+        
+        const idx = (y * width + x) * 4
+        output[idx] = r
+        output[idx + 1] = g
+        output[idx + 2] = b
+        output[idx + 3] = a
+      }
+    }
+    
+    data.set(output)
+  }
+
+  function drawText(ctx, text) {
+    if (!text.trim()) return
+    
+    const canvas = ctx.canvas
+    ctx.font = 'bold 40px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    // 添加文字描边和填充
+    ctx.strokeStyle = 'black'
+    ctx.lineWidth = 4
+    ctx.fillStyle = 'white'
+    
+    const x = canvas.width / 2
+    const y = canvas.height - 60
+    
+    ctx.strokeText(text, x, y)
+    ctx.fillText(text, x, y)
+  }
+
+  return {
+    loadImageToCanvas,
+    applyStyle,
+    drawText
+  }
+}
+```
+
+最后创建一个简单的README文件：
+
+```markdown:README.md
+# 表情包生成器 / Meme Generator
+
+一个基于Vue3的表情包生成工具，支持图片上传、风格转换、文字添加和下载功能。
+
+## 功能特性
+
+- 🖼️ 图片上传（支持拖拽）
+- 🎨 多种风格滤镜（黑白、怀旧、模糊等）
+- ✏️ 文字添加（最多10字）
+- 📥 一键下载生成的表情包
+- 🌍 国际化支持（中文/英文）
+- 📱 响应式设计
+
+## 技术栈
+
+- Vue 3 + Composition API
+- Vite
+- Vue I18n
+- Canvas API
+- 原生JavaScript
+
+## 安装和运行
+
+```bash
+# 安装依赖
+npm install
+
+# 开发模式
+npm run dev
+
+# 构建生产版本
+npm run build
+
+# 预览生产版本
+npm run preview
+```
+
+## 部署
+
+构建后的文件可以直接部署到任何静态文件服务器：
+
+- GitHub Pages
+- Vercel
+- Netlify
+- 或直接打开 `dist/index.html`
+
+## 项目结构
+
+```
+.
+├── public/
+├── src/
+│   ├── composables/
+│   │   └── useCanvasUtils.js    # Canvas工具函数
+│   ├── App.vue                  # 主应用组件
+│   ├── i18n.js                  # 国际化配置
+│   └── main.js                  # 入口文件
+├── index.html
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+## 使用说明
+
+1. 点击上传区域或拖拽图片到页面
+2. 选择想要的风格滤镜
+3. 输入表情包文字（最多10字）
+4. 点击下载按钮保存图片
+
+## 浏览器支持
+
+- Chrome/Edge 88+
+- Firefox 78+
+- Safari 14+
+
+## License
+
+MIT
+```
+
+现在项目已经创建完成！这是一个完整的表情包生成器，具有以下特点：
+
+### 主要功能：
+1. **图片上传** - 支持点击上传和拖拽上传
+2. **风格滤镜** - 8种不同的图像处理效果
+3. **文字添加** - 自动居中的文字叠加
+4. **实时预览** - Canvas实时渲染
+5. **一键下载** - 生成PNG格式图片
+6. **国际化** - 中英文切换
+7. **响应式设计** - 适配移动端
+
+### 技术亮点：
+- 使用Vue 3 Composition API
+- 自定义Canvas图像处理算法
+- 优雅的UI设计和动画效果
+- 无需服务器，纯前端实现
+
+您可以运行 `npm install` 然后 `npm run dev` 来启动开发服务器测试项目！ 
