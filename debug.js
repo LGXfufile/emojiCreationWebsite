@@ -32,4 +32,10 @@ try {
   console.log(`   - 项目名称: ${pkg.name}`)
   console.log(`   - 版本: ${pkg.version}`)
   console.log(`   - 依赖数量: ${Object.keys(pkg.dependencies || {}).length}`)
-  console.log(`   - 开 
+  console.log(`   - 开发依赖数量: ${Object.keys(pkg.devDependencies || {}).length}`)
+} catch (err) {
+  console.log('❌ package.json 格式错误')
+}
+
+console.log('\n🚀 运行方式:')
+console.log('node debug.js')
